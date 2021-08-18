@@ -50,7 +50,7 @@ let jsonSchema: z.ZodSchema<Json> = z.lazy(() =>
 
 let clientDataSchema = z.object({
   type: z.enum([MessageType.PING, MessageType.MESSAGE]),
-  data: jsonSchema,
+  data: jsonSchema.optional(),
 })
 
 class Room implements DurableObject {
@@ -218,12 +218,21 @@ class Room implements DurableObject {
       }
     })
 
-    let closeOrErrorHandler = () => {
-      this.endSession(session)
-    }
+    webSocket.addEventListener('close', ({ code, reason }) => {
+      try {
+        session.webSocket.close(code, reason)
+      } catch {}
 
-    webSocket.addEventListener('close', closeOrErrorHandler)
-    webSocket.addEventListener('error', closeOrErrorHandler)
+      this.endSession(session)
+    })
+
+    webSocket.addEventListener('error', () => {
+      try {
+        session.webSocket.close(1006)
+      } catch {}
+
+      this.endSession(session)
+    })
   }
 
   endSession(session: Session) {

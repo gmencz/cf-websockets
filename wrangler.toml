@@ -1,10 +1,8 @@
 name = "cf-websockets"
 # type = "javascript" is required to use the `[build]` section
 type = "javascript"
-account_id = ""
+account_id = "930ee94c5320c477a77b76445444be44"
 workers_dev = true
-route = ""
-zone_id = ""
 
 [build]
 command = "npm install && npm test && npm run build"
@@ -14,4 +12,7 @@ format = "modules"
 main = "./index.mjs"
 
 [durable_objects]
-bindings = [{name = "COUNTER", class_name = "CounterTs"}]
+bindings = [
+  { name = "rooms", class_name = "Room" },
+  { name = "limiters", class_name = "RateLimiter" }
+]

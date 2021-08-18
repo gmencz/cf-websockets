@@ -1,35 +1,25 @@
-// In order for the workers runtime to find the class that implements
-// our Durable Object namespace, we must export it from the root module.
-export { CounterTs } from './counter'
+import { Router } from 'itty-router'
+import { roomController } from './controllers/room'
+import { httpController } from './controllers/http'
+import type { Env } from './types'
+
+let router = Router()
+
+router
+  .get('/', httpController.slash)
+  .all('/rooms/:name', roomController.all)
+  .all('*', httpController.notFound)
+
+export { Room } from './durable-objects/room'
+export { RateLimiter } from './durable-objects/rate-limiter'
 
 export default {
   async fetch(request: Request, env: Env) {
     try {
-      return await handleRequest(request, env)
-    } catch (e) {
-      return new Response(e.message)
+      let response = await router.handle(request, env)
+      return response
+    } catch (error) {
+      return new Response(error.message, { status: 500 })
     }
   },
-}
-
-async function handleRequest(request: Request, env: Env) {
-  let url = new URL(request.url)
-  switch (url.pathname) {
-    case '/':
-    // Request comes in for a websocket upgrade:
-    //
-    default:
-      return new Response('Not found', { status: 404 })
-  }
-
-  // let id = env.COUNTER.idFromName('A')
-  // let obj = env.COUNTER.get(id)
-  // let resp = await obj.fetch(request.url)
-  // let count = parseInt(await resp.text())
-  // let wasOdd = isOdd(count) ? 'is odd' : 'is even'
-  // return new Response(`${count} ${wasOdd}`)
-}
-
-interface Env {
-  COUNTER: DurableObjectNamespace
 }

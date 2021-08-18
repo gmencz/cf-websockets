@@ -11,19 +11,23 @@
   "license": "MIT",
   "devDependencies": {
     "@cloudflare/workers-types": "^2.2.2",
-    "@rollup/plugin-commonjs": "^17.0.0",
-    "@rollup/plugin-node-resolve": "^11.1.0",
-    "@rollup/plugin-typescript": "^8.2.1",
-    "@types/jest": "^26.0.23",
+    "@rollup/plugin-commonjs": "^20.0.0",
+    "@rollup/plugin-node-resolve": "^13.0.4",
+    "@rollup/plugin-typescript": "^8.2.5",
+    "@types/jest": "^27.0.1",
     "isomorphic-fetch": "^3.0.0",
-    "jest": "^26.6.3",
-    "prettier": "^1.19.1",
-    "rollup": "^2.36.1",
-    "rollup-plugin-copy": "^3.3.0",
+    "jest": "^27.0.6",
+    "prettier": "^2.3.2",
+    "rollup": "^2.56.2",
+    "rollup-plugin-copy": "^3.4.0",
     "rollup-plugin-terser": "^7.0.2",
-    "ts-jest": "^26.5.6",
-    "tslib": "^2.2.0",
-    "typescript": "^4.2.4"
+    "ts-jest": "^27.0.5",
+    "tslib": "^2.3.1",
+    "typescript": "^4.3.5"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@tsndr/cloudflare-worker-jwt": "^1.1.2",
+    "itty-router": "^2.4.2",
+    "zod": "^3.7.2"
+  }
 }

@@ -69,7 +69,8 @@ class Room implements DurableObject {
   sessions: Session[]
 
   // The `router` will route incoming requests to the right handler.
-  router!: Router<unknown>
+  // Note that all the handlers use arrow functions so that we have the right `this` context.
+  router!: Router<Request>
 
   // The maximum amount of sessions a room can have at any given time.
   static maxCapacity = 100
@@ -87,12 +88,20 @@ class Room implements DurableObject {
       .get('/rooms/:name/users', this.getUsers)
   }
 
-  async getUsers() {
+  getUsers = async (request: Request) => {
+    try {
+      await this.authorize(request.headers.get('Authorization')?.split(' ')[1])
+    } catch (error) {
+      return new Response(error.message, {
+        status: 401,
+      })
+    }
+
     let users = this.sessions.map((s) => s.user)
     return json(users)
   }
 
-  async handleWebSocket(request: Request) {
+  handleWebSocket = async (request: Request) => {
     let upgradeHeader = request.headers.get('Upgrade')
     if (!upgradeHeader || upgradeHeader !== 'websocket') {
       return new Response('Expected Upgrade: websocket', { status: 426 })
@@ -140,10 +149,10 @@ class Room implements DurableObject {
       )
     }
 
-    // Authorize the session and retrieve the user.
+    // Authorize the request and retrieve the user.
     let user
     try {
-      user = await this.authorizeSession(url)
+      user = await this.authorize(url.searchParams.get('access_token'))
     } catch (error) {
       return webSocket.close(ErrorCode.UNAUTHORIZED, error.message)
     }
@@ -327,10 +336,7 @@ class Room implements DurableObject {
     }
   }
 
-  async authorizeSession(url: URL): Promise<User> {
-    let params = url.searchParams
-    let accessToken = params.get('access_token')
-
+  async authorize(accessToken: string | null | undefined): Promise<User> {
     if (!accessToken) {
       throw new Error('Missing access token')
     }

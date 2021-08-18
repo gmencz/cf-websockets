@@ -17,8 +17,8 @@ class RateLimiter implements DurableObject {
 
     if (request.method == 'POST') {
       // POST request means the user performed an action.
-      // We allow one action per 1 seconds.
-      this.nextAllowedTime += 1
+      // We allow one action per 5 seconds.
+      this.nextAllowedTime += 5
     }
 
     // Return the number of seconds that the client needs to wait.

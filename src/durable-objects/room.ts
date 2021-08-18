@@ -1,6 +1,8 @@
 import jwt from '@tsndr/cloudflare-worker-jwt'
 import { z } from 'zod'
+import { Router } from 'itty-router'
 import { RateLimiterClient } from './rate-limiter'
+import { json } from '../utils/responses'
 import type { Env } from '../types'
 
 enum ErrorCode {
@@ -66,6 +68,9 @@ class Room implements DurableObject {
   // `sessions`.
   sessions: Session[]
 
+  // The `router` will route incoming requests to the right handler.
+  router!: Router<unknown>
+
   // The maximum amount of sessions a room can have at any given time.
   static maxCapacity = 100
 
@@ -73,9 +78,21 @@ class Room implements DurableObject {
     this.storage = state.storage
     this.env = env
     this.sessions = []
+    this.initRouter()
   }
 
-  async fetch(request: Request) {
+  initRouter() {
+    this.router = Router()
+      .all('/rooms/:name', this.handleWebSocket)
+      .get('/rooms/:name/users', this.getUsers)
+  }
+
+  async getUsers() {
+    let users = this.sessions.map((s) => s.user)
+    return json(users)
+  }
+
+  async handleWebSocket(request: Request) {
     let upgradeHeader = request.headers.get('Upgrade')
     if (!upgradeHeader || upgradeHeader !== 'websocket') {
       return new Response('Expected Upgrade: websocket', { status: 426 })
@@ -99,6 +116,15 @@ class Room implements DurableObject {
 
     // Now we return the other end of the pair to the client.
     return new Response(null, { status: 101, webSocket: pair[0] })
+  }
+
+  async fetch(request: Request) {
+    try {
+      let response = await this.router.handle(request)
+      return response
+    } catch (error) {
+      return new Response(error.message, { status: 500 })
+    }
   }
 
   async handleSession(webSocket: WebSocket, url: URL, ip: string) {

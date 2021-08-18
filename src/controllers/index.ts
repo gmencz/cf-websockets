@@ -1,9 +1,6 @@
-import type { Env, RoutedRequest } from '../types'
+import type { RoutedRequestHandler } from '../types'
 
-type ControllerType = Record<
-  string,
-  (request: RoutedRequest, env: Env) => Response | Promise<Response>
->
+type ControllerType = Record<string, RoutedRequestHandler>
 
 function Controller<TController extends ControllerType>(
   controller: TController,

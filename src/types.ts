@@ -10,6 +10,11 @@ export interface Env {
 
 export type RoutedRequest = Request & IttyRequest
 
+export type RoutedRequestHandler = (
+  request: RoutedRequest,
+  env: Env,
+) => Response | Promise<Response>
+
 declare global {
   interface WebSocket {
     accept(): void

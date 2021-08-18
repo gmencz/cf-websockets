@@ -1,14 +1,11 @@
 import { Router } from 'itty-router'
 import { roomController } from './controllers/room'
-import { httpController } from './controllers/http'
+import { notFoundHandler } from './utils/responses'
 import type { Env } from './types'
 
 let router = Router()
 
-router
-  .get('/', httpController.slash)
-  .all('/rooms/:name', roomController.all)
-  .all('*', httpController.notFound)
+router.all('/rooms/:name', roomController.all).all('*', notFoundHandler)
 
 export { Room } from './durable-objects/room'
 export { RateLimiter } from './durable-objects/rate-limiter'

@@ -8,7 +8,6 @@
     "format": "prettier --write '**/*.{js,css,json,md}'"
   },
   "author": "Gabriel Méndez <yo@gabrielmendezc.com>",
-  "license": "MIT",
   "devDependencies": {
     "@cloudflare/workers-types": "^2.2.2",
     "@rollup/plugin-commonjs": "^20.0.0",

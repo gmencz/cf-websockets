@@ -19,7 +19,7 @@ enum MessageType {
 
 interface Message {
   type: MessageType
-  data?: Literal | Record<string, unknown>
+  data?: any
 }
 
 type User = z.infer<typeof userSchema> & Record<string, unknown>
@@ -199,10 +199,25 @@ class Room implements DurableObject {
           }
 
           case MessageType.MESSAGE: {
-            return this.broadcast({
-              type: MessageType.MESSAGE,
-              data: message.data,
-            })
+            if (!data.data) {
+              return this.send(
+                {
+                  type: MessageType.ERROR,
+                  data: {
+                    message: 'Invalid `data` field',
+                  },
+                },
+                session,
+              )
+            }
+
+            return this.broadcast(
+              {
+                type: MessageType.MESSAGE,
+                data: data.data,
+              },
+              session.user.id,
+            )
           }
         }
       } catch (error) {

@@ -9,8 +9,9 @@ enum ErrorCode {
 }
 
 enum MessageType {
-  USER_JOINED = 'user_joined',
-  USER_LEFT = 'user_left',
+  PRESENCE_USER_JOINED = 'presence.user_joined',
+  PRESENCE_USER_LEFT = 'presence.user_left',
+  PRESENCE_INFO = 'presence.info',
   ERROR = 'error',
   MESSAGE = 'message',
   PING = 'ping',
@@ -133,11 +134,13 @@ class Room implements DurableObject {
 
     // If the user doesn't have any existing sessions in this room, notify all users in the room
     // that they joined.
-    let isNewUser = !this.sessions.some((s) => s.user.id === session.user.id)
-    if (isNewUser) {
+    let isExistingUser = this.sessions.some(
+      (s) => s.user.id === session.user.id,
+    )
+    if (!isExistingUser) {
       this.broadcast(
         {
-          type: MessageType.USER_JOINED,
+          type: MessageType.PRESENCE_USER_JOINED,
           data: {
             user: session.user,
           },
@@ -146,8 +149,17 @@ class Room implements DurableObject {
       )
     }
 
-    // Add the new session to the sessions list.
+    // Add the new session to the sessions list and give the user info about the room's presence.
     this.sessions.push(session)
+    this.send(
+      {
+        type: MessageType.PRESENCE_INFO,
+        data: {
+          users: this.sessions.map((s) => s.user),
+        },
+      },
+      session,
+    )
 
     // Set event handlers to receive messages.
     webSocket.addEventListener('message', async (message) => {
@@ -262,7 +274,7 @@ class Room implements DurableObject {
     // that this user left the room.
     if (!hasOtherSessions) {
       this.broadcast({
-        type: MessageType.USER_LEFT,
+        type: MessageType.PRESENCE_USER_LEFT,
         data: {
           user: session.user,
         },

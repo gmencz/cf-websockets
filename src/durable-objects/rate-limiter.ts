@@ -23,7 +23,7 @@ class RateLimiter implements DurableObject {
 
     // Return the number of seconds that the client needs to wait.
     //
-    // We provide a "grace" period of 20 seconds, meaning that the client can make 4-5 requests
+    // We provide a "grace" period of 20 seconds, meaning that the client can make 9-10 requests
     // in a quick burst before they start being limited.
     let cooldown = Math.max(0, this.nextAllowedTime - now - 20)
     return new Response(cooldown.toString())

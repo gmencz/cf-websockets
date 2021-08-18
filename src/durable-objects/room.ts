@@ -3,16 +3,34 @@ import { z } from 'zod'
 import { RateLimiterClient } from './rate-limiter'
 import type { Env } from '../types'
 
-let errorCodes = {
-  unauthorized: 4001,
-  maxCapacity: 4002,
+enum ErrorCode {
+  UNAUTHORIZED = 4001,
+  ROOM_AT_MAX_CAPACITY = 4002,
 }
 
-let events = {
-  userJoined: 'user_joined',
-  userLeft: 'user_left',
-  error: 'error',
-  message: 'message',
+enum MessageType {
+  USER_JOINED = 'user_joined',
+  USER_LEFT = 'user_left',
+  ERROR = 'error',
+  MESSAGE = 'message',
+  PING = 'ping',
+  PONG = 'pong',
+}
+
+interface Message {
+  type: MessageType
+  data?: Literal | Record<string, unknown>
+}
+
+type User = z.infer<typeof userSchema> & Record<string, unknown>
+
+type Literal = boolean | null | number | string
+type Json = Literal | { [key: string]: Json } | Json[]
+
+interface Session {
+  user: User
+  quit: boolean
+  webSocket: WebSocket
 }
 
 let accessTokenSchema = z.object({
@@ -24,6 +42,16 @@ let userSchema = z
     id: z.string(),
   })
   .passthrough()
+
+let literalSchema = z.union([z.string(), z.number(), z.boolean(), z.null()])
+let jsonSchema: z.ZodSchema<Json> = z.lazy(() =>
+  z.union([literalSchema, z.array(jsonSchema), z.record(jsonSchema)]),
+)
+
+let clientDataSchema = z.object({
+  type: z.enum([MessageType.PING, MessageType.MESSAGE]),
+  data: jsonSchema,
+})
 
 class Room implements DurableObject {
   // `storage` provides access to our durable storage. It provides a simple KV
@@ -77,10 +105,10 @@ class Room implements DurableObject {
     // WebSocket in JavaScript, not sending it elsewhere.
     webSocket.accept()
 
-    // Close the WebSocket if the room is full.
+    // Close the WebSocket if the room is at max capacity.
     if (this.sessions.length >= Room.maxCapacity) {
       return webSocket.close(
-        errorCodes.maxCapacity,
+        ErrorCode.ROOM_AT_MAX_CAPACITY,
         'This room is at max capacity',
       )
     }
@@ -90,7 +118,7 @@ class Room implements DurableObject {
     try {
       user = await this.authorizeSession(url)
     } catch (error) {
-      return webSocket.close(errorCodes.unauthorized, error.message)
+      return webSocket.close(ErrorCode.UNAUTHORIZED, error.message)
     }
 
     // Set up our rate limiter client.
@@ -100,25 +128,26 @@ class Room implements DurableObject {
       (err) => webSocket.close(1011, err.stack),
     )
 
-    // Create our session, add it to the sessions list.
+    // Create our session.
     let session: Session = { webSocket, user, quit: false }
-    this.sessions.push(session)
 
     // If the user doesn't have any existing sessions in this room, notify all users in the room
-    // that this user joined.
-    // TODO: FIX THIS LOGIC; DOESNT WORK FOR SOME REASON
+    // that they joined.
     let isNewUser = !this.sessions.some((s) => s.user.id === session.user.id)
     if (isNewUser) {
-    }
-    this.broadcast(
-      {
-        event: events.userJoined,
-        data: {
-          user: session.user,
+      this.broadcast(
+        {
+          type: MessageType.USER_JOINED,
+          data: {
+            user: session.user,
+          },
         },
-      },
-      session.user.id,
-    )
+        session.user.id,
+      )
+    }
+
+    // Add the new session to the sessions list.
+    this.sessions.push(session)
 
     // Set event handlers to receive messages.
     webSocket.addEventListener('message', async (message) => {
@@ -133,16 +162,12 @@ class Room implements DurableObject {
           return
         }
 
-        if (message.data === 'PING') {
-          return this.send('PONG', session)
-        }
-
         // Check if the user is over their rate limit and reject the message if so.
         let isOverRateLimit = !limiter.checkLimit()
         if (isOverRateLimit) {
           return this.send(
             {
-              event: events.error,
+              type: MessageType.ERROR,
               data: {
                 message:
                   'Your IP is being rate-limited, please try again later',
@@ -152,14 +177,14 @@ class Room implements DurableObject {
           )
         }
 
-        // Parse the message as JSON, if the message contains invalid JSON, reject it.
+        // Parse the message as JSON, if the message is invalid reject it.
         let data
         try {
-          data = JSON.parse(message.data)
+          data = clientDataSchema.parse(JSON.parse(message.data))
         } catch (error) {
           return this.send(
             {
-              event: events.error,
+              type: MessageType.ERROR,
               data: {
                 message: 'Invalid message',
               },
@@ -168,12 +193,22 @@ class Room implements DurableObject {
           )
         }
 
-        // Broadcast the message to all other users except the one sending it.
-        this.broadcast({ event: events.message, data }, session.user.id)
+        switch (data.type) {
+          case MessageType.PING: {
+            return this.send({ type: MessageType.PONG }, session)
+          }
+
+          case MessageType.MESSAGE: {
+            return this.broadcast({
+              type: MessageType.MESSAGE,
+              data: message.data,
+            })
+          }
+        }
       } catch (error) {
         return this.send(
           {
-            event: events.error,
+            type: MessageType.ERROR,
             data: {
               message: 'Internal Server Error',
             },
@@ -195,15 +230,18 @@ class Room implements DurableObject {
     session.quit = true
     this.sessions = this.sessions.filter((s) => s.user.id !== session.user.id)
 
-    // If the user doesn't have any other sessions, notify all users in the room
-    // that this user left the room.
     let hasOtherSessions = this.sessions.some(
       (s) => s.user.id === session.user.id,
     )
+
+    // If the user doesn't have any other sessions, notify all users in the room
+    // that this user left the room.
     if (!hasOtherSessions) {
       this.broadcast({
-        event: events.userLeft,
-        data: { user: session.user },
+        type: MessageType.USER_LEFT,
+        data: {
+          user: session.user,
+        },
       })
     }
   }
@@ -220,9 +258,7 @@ class Room implements DurableObject {
 
   send(message: Message, session: Session) {
     try {
-      session.webSocket.send(
-        typeof message === 'string' ? message : JSON.stringify(message),
-      )
+      session.webSocket.send(JSON.stringify(message))
     } catch (error) {
       // Whoops, this connection is dead. End the session.
       this.endSession(session)
@@ -261,21 +297,6 @@ class Room implements DurableObject {
       throw new Error('Invalid access token x-user claim')
     }
   }
-}
-
-type Message =
-  | {
-      event: string
-      data: Record<string, unknown>
-    }
-  | string
-
-type User = z.infer<typeof userSchema> & Record<string, unknown>
-
-interface Session {
-  user: User
-  quit: boolean
-  webSocket: WebSocket
 }
 
 export { Room }
